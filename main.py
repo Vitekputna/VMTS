@@ -1,19 +1,19 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from CRSprop import CRSprop
 from models import*
 Mm = 44
 Tc = 309.56
 Pc = 72.3e5
 acf = 0.162
 
-Mm = [40,30]
-Tc = [309.56,350]
-Pc = [72.3e5,82e5]
-acf = [0.162,0.15]
+# Mm = [40,30]
+# Tc = [309.56,350]
+# Pc = [72.3e5,82e5]
+# acf = [0.162,0.15]
 
-pg = cubic_EOS(Mm,Tc,Pc,acf,[0.5,0.5])
+pg = cubic_EOS(Mm,Tc,Pc,acf)
 # print(pg.pressure(200,300))
+print(pg.density(9e6,350))
 
 
 # idg = ideal_gas(Mm)

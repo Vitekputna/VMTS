@@ -132,7 +132,7 @@ class cubic_EOS(properties_model):
         else:
             return 0.3796+1.485*acentric_factor-0.1644*acentric_factor**2+0.01667*acentric_factor**3
 
-    def init_pure(self,molar_mass,critical_temperature,critical_pressure,acentric_factor):
+    def init_pure(self,molar_mass,critical_temperature,critical_pressure,acentric_factor) -> None:
 
         self.Mm = molar_mass
         self.Tc = critical_temperature
@@ -144,15 +144,17 @@ class cubic_EOS(properties_model):
         
         self.m = self.get_m(acentric_factor)
 
-    def init_mixture(self,molar_mass,critical_temperature,critical_pressure,acentric_factor,molar_fractions):
+    def init_mixture(self,molar_mass,critical_temperature,critical_pressure,acentric_factor,molar_fractions) -> None:
         
         size = len(molar_fractions)
 
         self.Mm = np.sum(np.multiply(molar_fractions,molar_mass))
         
+        self.X = molar_fractions
         self.Tc = critical_temperature
         self.Pc = critical_pressure
         self.acentric_factor = acentric_factor
+        self.N = len(self.X)
 
         self.a_c = [(self.Omega_a*(self.R*critical_temperature[i])**2)/critical_pressure[i] for i in range(size)]
         self.b = [self.Omega_b*self.R*critical_temperature[i]/critical_pressure[i] for i in range(size)]
@@ -179,7 +181,15 @@ class cubic_EOS(properties_model):
         return self.a_c*(1+self.m*(1-np.sqrt(temperature/self.Tc)))**2
     
     def get_a_mixture(self, temperature : float) -> float:
-        pass
+        a_pure = [self.a_c[i]*(1+self.m[i]*(1-np.sqrt(temperature/self.Tc[i])))**2 for i in range(self.N)]
+
+        a_mix = 0
+
+        for i in range(self.N):
+            for j in range(self.N):
+                a_mix += self.X[i]*self.X[j]*np.sqrt(a_pure[i]*a_pure[j])
+
+        return a_mix
 
     def get_a(self, temperature : float):
         
@@ -192,9 +202,16 @@ class cubic_EOS(properties_model):
         return self.b
     
     def get_b_mixture(self) -> float:
-        pass
+        
+        b_mix = 0
 
-    def get_b(self):
+        for i in range(self.N):
+            for j in range(self.N):
+                b_mix += self.X[i]*self.X[j]*0.5*(self.b[i]+self.b[j])
+
+        return b_mix
+
+    def get_b(self) -> float:
         
         if self.is_mixture:
             return self.get_b_mixture()
@@ -208,6 +225,65 @@ class cubic_EOS(properties_model):
 
         return self.R*temperature/(Vm-b)-a/((Vm+self.delta_1*b)*(Vm+self.delta_2*b))
 
+    def compressibility_factor(self, density : float, temperature : float) -> float:
+        a = self.get_a(temperature)
+        b = self.get_b()
 
+        Vm = self.Mm*1e-3/density
+        return 1/(1-b/Vm) - (a*b/Vm)/(self.R*temperature*b*(1+self.delta_1*b/Vm)*(1+self.delta_2*b/Vm))
 
+    def reduced_residual_helmholz(self, density : float, temperature : float) -> float:
+        a = self.get_a(temperature)
+        b = self.get_b()
+
+        Vm = self.Mm*1e-3/density
+        return -np.log(1-b+Vm)-(a/(self.R*temperature*b*(self.delta_1-self.delta_2)))*np.log((1+self.delta_1*b/Vm)/(1+self.delta_2*b/Vm))
+    
+    def fugacity_coefficient(self, density : float, temperature : float) -> float:
+        Z = self.compressibility_factor(density,temperature)
+        RAr = self.reduced_residual_helmholz(density,temperature)
+
+        return np.exp(RAr + Z -1 -np.log(Z))
         
+    def density(self, pressure: float, temperature: float) -> list:
+        
+        a = self.get_a(temperature)
+        b = self.get_b()
+        
+        R = self.R
+        d1 = self.delta_1
+        d2 = self.delta_2
+        T = temperature
+        P = pressure
+
+        A = P
+        B = P*b*(d1+d2-1)-R*T
+        C = P*(b**2)*(d1*d2-d1-d2) -R*T*b*(d1+d2) + a
+        D = -P*d1*d2*b**3 -R*T*d1*d2*b**2 -a*b
+
+        a = B/A
+        b = C/A
+        c = D/A
+
+        Q = (a**2 -3*b)/9
+        R = (2*a**3-9*a*b+27*c)/54
+
+        if R**2 < Q**3:
+            #3 roots
+            O = np.arccos(R/np.sqrt(Q**3))
+
+            x1 = -2*np.sqrt(Q)*np.cos(O/3) -a/3
+            x2 = -2*np.sqrt(Q)*np.cos((O+2*np.pi)/3) -a/3
+            x3 = -2*np.sqrt(Q)*np.cos((O-2*np.pi)/3) -a/3
+
+            return [self.Mm/x1/1000,self.Mm/x2/1000,self.Mm/x2/1000]
+        else:
+            A = -np.sign(R)*np.power(abs(R)+np.sqrt(R**2-Q**3),1/3)
+            
+            if A == 0:
+                B = 0
+            else:
+                B = Q/A
+
+            x1 = A+B - a/3
+            return [self.Mm/x1/1000]
