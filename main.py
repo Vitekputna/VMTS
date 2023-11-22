@@ -1,44 +1,31 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from models import*
+# Mm = 58.1222
+# Tc = 425.125
+# Pc = 3.796e6
+# acf = 0.201
+
+Mm = [40,50]
+Tc = [309.56,280]
+Pc = [72.3e5,50e5]
+acf = [0.162,0.15]
+
+pg = cubic_EOS(Mm,Tc,Pc,acf,molar_fractions=[0.9,0.1])
+
 Mm = 44
 Tc = 309.56
 Pc = 72.3e5
 acf = 0.162
 
-# Mm = [40,30]
-# Tc = [309.56,350]
-# Pc = [72.3e5,82e5]
-# acf = [0.162,0.15]
+n2o = cubic_EOS(Mm,Tc,Pc,acf)
 
-pg = cubic_EOS(Mm,Tc,Pc,acf)
-# print(pg.pressure(200,300))
-print(pg.density(9e6,350))
+# print(pg.saturated_pressure(200,N_divs=100))
 
+T = np.linspace(200,275,50)
+for t in T:
+    plt.plot(t,pg.saturated_pressure(t),'rx')
+    plt.plot(t,n2o.saturated_pressure(t),'bx')
 
-# idg = ideal_gas(Mm)
-# vdW = van_der_waals(Mm,309.56,72.3e5)
-# pr = Peng_Robinson(Mm,309.56,72.3e5,0.162)
-
-# print(vdW.density(9e6,300))
-# print(pr.density(9e6,300))
-# print(pr.compressibility_factor(200,300))
-# print(pr.fugacity_coefficient(200,300))
-
-# print(pr.pressure(763,300)-9e6)
-
-# # # props = CRSprop(["N2O"])
-
-# rhos = np.linspace(1,1000,100)
-# T = 309.56
-
-# for rho in rhos:
-#     plt.plot(rho,idg.pressure(rho,T),'rx')
-#     plt.plot(rho,vdW.pressure(rho,T),'k.')
-#     plt.plot(rho,pr.pressure(rho,T),'go')
-
-# # print(idg.pressure(rho,T))
-# # print(vdW.pressure(rho,T))
-# plt.ylim([0,50e6])
-# plt.show()
+plt.show()
 
