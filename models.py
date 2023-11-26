@@ -26,7 +26,7 @@ class ideal_gas(properties_model):
         return pressure/(self.gas_constant*temperature)
             
 class cubic_EOS(properties_model):
-
+# Initialization
     @staticmethod
     def get_m(acentric_factor : float) -> float:
 
@@ -80,6 +80,7 @@ class cubic_EOS(properties_model):
         else:
             self.init_pure(molar_mass,critical_temperature,critical_pressure,acentric_factor)
 
+# Pure and mixture a,b coefficients
     def get_a_pure(self, temperature : float) -> float:
         return self.a_c*(1+self.m*(1-np.sqrt(temperature/self.Tc)))**2
     
@@ -120,7 +121,8 @@ class cubic_EOS(properties_model):
             return self.get_b_mixture()
         else:
             return self.get_b_pure()
-        
+
+# Basic properties
     def pressure(self, density: float, temperature: float) -> float:
         Vm = self.Mm*1e-3/density
         a = self.get_a(temperature)
@@ -134,20 +136,7 @@ class cubic_EOS(properties_model):
 
         Vm = self.Mm*1e-3/density
         return 1/(1-b/Vm) - (a*b/Vm)/(self.R*temperature*b*(1+self.delta_1*b/Vm)*(1+self.delta_2*b/Vm))
-
-    def reduced_residual_helmholz(self, density : float, temperature : float) -> float:
-        a = self.get_a(temperature)
-        b = self.get_b()
-
-        Vm = self.Mm*1e-3/density
-        return -np.log(1-b/Vm)-(a/(self.R*temperature*b*(self.delta_1-self.delta_2)))*np.log((1+self.delta_1*b/Vm)/(1+self.delta_2*b/Vm))
     
-    def fugacity_coefficient(self, density : float, temperature : float) -> float:
-        Z = self.compressibility_factor(density,temperature)
-        RAr = self.reduced_residual_helmholz(density,temperature)
-
-        return np.exp(RAr + Z -1 -np.log(Z))
-        
     def density(self, pressure: float, temperature: float) -> list:
         
         a = self.get_a(temperature)
@@ -193,6 +182,21 @@ class cubic_EOS(properties_model):
             x1 = A+B - a/3
             return [self.Mm/x1/1000]
 
+# Helmholz function and derivatives
+    def reduced_residual_helmholz(self, density : float, temperature : float) -> float:
+        a = self.get_a(temperature)
+        b = self.get_b()
+
+        Vm = self.Mm*1e-3/density
+        return -np.log(1-b/Vm)-(a/(self.R*temperature*b*(self.delta_1-self.delta_2)))*np.log((1+self.delta_1*b/Vm)/(1+self.delta_2*b/Vm))
+    # Wrong
+    def fugacity_coefficient(self, density : float, temperature : float) -> float:
+        Z = self.compressibility_factor(density,temperature)
+        RAr = self.reduced_residual_helmholz(density,temperature)
+
+        return np.exp(RAr + Z -1 -np.log(Z))
+        
+    # Wrong
     def saturated_pressure(self, temperature : float, N_divs : int = 100) -> float:
         # Find P at which is phi_l = phi_v for given T
 
