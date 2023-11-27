@@ -8,6 +8,11 @@ Pc = [72.3e5]
 acf = [0.162]
 
 pg = cubic_EOS(Mm,Tc,Pc,acf)
-print(pg.pressure(1039.26,250))
-print(pg.density(1622715,250))
-print(pg.saturated_pressure(250))
+print(pg.saturated_pressure(150,P_step=50e3))
+
+T_vec = np.linspace(150,300)
+
+for T in T_vec:
+    plt.plot(T,pg.saturated_pressure(T),'rx')
+
+plt.show()

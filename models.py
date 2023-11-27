@@ -149,18 +149,18 @@ class cubic_EOS(properties_model):
 
 # Helmholz function, derivatives and helper functions
 
-    def get_D(self, temperature : float) -> float:
+    def __get_D(self, temperature : float) -> float:
         return self.get_a(temperature)*self.N_moles**2
     
-    def get_B(self) -> float:
+    def __get_B(self) -> float:
         return self.N_moles*self.get_b()
 
-    def get_g(self, volume : float) -> float:
-        B = self.get_B()
+    def __get_g(self, volume : float) -> float:
+        B = self.__get_B()
         return np.log(1-B/volume)
 
-    def get_f(self, volume : float) -> float:
-        B = self.get_B()
+    def __get_f(self, volume : float) -> float:
+        B = self.__get_B()
         V = volume
         R = self.R
         d1 = self.delta_1
@@ -172,48 +172,48 @@ class cubic_EOS(properties_model):
         volume = self.N_moles*self.Mm*1e-3/density
         T = temperature
 
-        g = self.get_g(volume)
-        D = self.get_D(T)
-        f = self.get_f(volume)
+        g = self.__get_g(volume)
+        D = self.__get_D(T)
+        f = self.__get_f(volume)
 
         return -self.N_moles*g - D*f/T
 
-    def get_Fn(self, volume : float) -> float:
-        return -self.get_g(volume)
+    def __get_Fn(self, volume : float) -> float:
+        return -self.__get_g(volume)
     
-    def get_gB(self, volume : float) -> float:
-        return -1/(volume-self.get_B())
+    def __get_gB(self, volume : float) -> float:
+        return -1/(volume-self.__get_B())
 
-    def get_fV(self, volume : float) -> float:
+    def __get_fV(self, volume : float) -> float:
         V = volume
         d1 = self.delta_1
         d2 = self.delta_2
-        B = self.get_B()
+        B = self.__get_B()
 
         return -1/(self.R*(V+d1*B)*(V+d2*B))
 
-    def get_fB(self, volume : float) -> float:
-        f = self.get_f(volume)
+    def __get_fB(self, volume : float) -> float:
+        f = self.__get_f(volume)
         V = volume
-        fV = self.get_fV(volume)
-        B = self.get_B()
+        fV = self.__get_fV(volume)
+        B = self.__get_B()
 
         return -(f+V*fV)/B
 
-    def get_FB(self, temperature : float, volume : float) -> float:
+    def __get_FB(self, temperature : float, volume : float) -> float:
         n = self.N_moles
-        gB = self.get_gB(volume)
-        D = self.get_D(temperature)
-        fB = self.get_fB(volume)
+        gB = self.__get_gB(volume)
+        D = self.__get_D(temperature)
+        fB = self.__get_fB(volume)
 
         return -n*gB-D*fB/temperature
 
-    def get_FD(self, temperature : float, volume : float) -> float:
-        f = self.get_f(volume)
+    def __get_FD(self, temperature : float, volume : float) -> float:
+        f = self.__get_f(volume)
 
         return -f/temperature
 
-    def get_specie_D(self, specie_idx : int, temperature : float) -> float:
+    def __get_specie_D(self, specie_idx : int, temperature : float) -> float:
         a_pure = [self.a_c[i]*(1+self.m[i]*(1-np.sqrt(temperature/self.Tc[i])))**2 for i in range(self.N)]
 
         Di = 0
@@ -222,8 +222,8 @@ class cubic_EOS(properties_model):
 
         return Di
     
-    def get_specie_B(self, specie_idx : int) -> float:
-        B = self.get_B()
+    def __get_specie_B(self, specie_idx : int) -> float:
+        B = self.__get_B()
         
         sum = 0
         for i in range(self.N):
@@ -232,11 +232,11 @@ class cubic_EOS(properties_model):
         return(sum-B)/self.N_moles
         
     def helmholz_dFdn(self, specie_idx : int, temperature : float, volume : float) -> float:
-        Fn = self.get_Fn(volume)
-        FB = self.get_FB(temperature,volume)
-        Bi = self.get_specie_B(specie_idx)
-        FD = self.get_FD(temperature,volume)
-        Di = self.get_specie_D(specie_idx,temperature)
+        Fn = self.__get_Fn(volume)
+        FB = self.__get_FB(temperature,volume)
+        Bi = self.__get_specie_B(specie_idx)
+        FD = self.__get_FD(temperature,volume)
+        Di = self.__get_specie_D(specie_idx,temperature)
 
         return Fn+FB*Bi+FD*Di
         
@@ -266,8 +266,8 @@ class cubic_EOS(properties_model):
         P_old = P_new
         d_phi = 0
 
-        run = True
-        while run:
+        counter = 0
+        while counter < 1e6:
             density = self.density(P_new,temperature)
 
             if len(density) > 1:
@@ -286,5 +286,12 @@ class cubic_EOS(properties_model):
                 
             P_old = P_new
             P_new = P_new-P_step
+
+            if P_new < 0:
+                P_new = 1e3
+
             last_d_phi = d_phi
+            counter += 1
+
+            
 
