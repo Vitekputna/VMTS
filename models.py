@@ -47,13 +47,15 @@ class cubic_EOS(properties_model):
         
         self.m = self.get_m(acentric_factor)
 
-    def init_mixture(self,molar_mass,critical_temperature,critical_pressure,acentric_factor,molar_fractions) -> None:
-        
-        size = len(molar_fractions)
+        self.X = [1]
 
-        self.Mm = np.sum(np.multiply(molar_fractions,molar_mass))
+    def init_mixture(self,molar_mass,critical_temperature,critical_pressure,acentric_factor,number_moles) -> None:
         
-        self.X = molar_fractions
+        size = len(number_moles)
+
+        self.Mm = np.sum(np.multiply(number_moles,molar_mass))/self.N_moles
+        
+        self.X = np.multiply(number_moles,1/self.N_moles)
         self.Tc = critical_temperature
         self.Pc = critical_pressure
         self.acentric_factor = acentric_factor
@@ -63,7 +65,7 @@ class cubic_EOS(properties_model):
         self.b = [self.Omega_b*self.R*critical_temperature[i]/critical_pressure[i] for i in range(size)]
         self.m = [self.get_m(acentric_factor[i]) for i in range(size)]
             
-    def __init__(self, molar_mass, critical_temperature, critical_pressure, acentric_factor, molar_fractions : list = [], c = 1) -> None:
+    def __init__(self, molar_mass, critical_temperature, critical_pressure, acentric_factor, number_moles : list = [1], c = 1) -> None:
         self.R = 8.314
 
         self.Omega_a = 0.45724
@@ -72,11 +74,14 @@ class cubic_EOS(properties_model):
         self.delta_1 = 0.5*(c+1+np.sqrt((c+1)**2+4*c))
         self.delta_2 = 0.5*(c+1-np.sqrt((c+1)**2+4*c))
 
+        self.N_moles = sum(number_moles)
+
         self.is_mixture = False
+        self.N = len(number_moles)
         
-        if len(molar_fractions) > 1:
+        if self.N > 1:
             self.is_mixture = True
-            self.init_mixture(molar_mass,critical_temperature,critical_pressure,acentric_factor,molar_fractions)
+            self.init_mixture(molar_mass,critical_temperature,critical_pressure,acentric_factor,number_moles)
         else:
             self.init_pure(molar_mass,critical_temperature,critical_pressure,acentric_factor)
 
@@ -182,65 +187,153 @@ class cubic_EOS(properties_model):
             x1 = A+B - a/3
             return [self.Mm/x1/1000]
 
-# Helmholz function and derivatives
+# Helmholz function, derivatives and helper functions
+
+    def get_D(self, temperature : float) -> float:
+        return self.get_a(temperature)*self.N_moles**2
+    
+    def get_B(self) -> float:
+        return self.N_moles*self.get_b()
+
+    def get_g(self, volume : float) -> float:
+        B = self.get_B()
+        return np.log(1-B/volume)
+
+    def get_f(self, volume : float) -> float:
+        B = self.get_B()
+        V = volume
+        R = self.R
+        d1 = self.delta_1
+        d2 = self.delta_2
+
+        return np.log((1+d1*B/V)/(1+d2*B/V))/(R*B*(d1-d2))
+
     def reduced_residual_helmholz(self, density : float, temperature : float) -> float:
-        a = self.get_a(temperature)
-        b = self.get_b()
+        volume = self.N_moles*self.Mm/density
+        T = temperature
 
-        Vm = self.Mm*1e-3/density
-        return -np.log(1-b/Vm)-(a/(self.R*temperature*b*(self.delta_1-self.delta_2)))*np.log((1+self.delta_1*b/Vm)/(1+self.delta_2*b/Vm))
-    # Wrong
-    def fugacity_coefficient(self, density : float, temperature : float) -> float:
-        Z = self.compressibility_factor(density,temperature)
-        RAr = self.reduced_residual_helmholz(density,temperature)
+        g = self.get_g(volume)
+        D = self.get_D(T)
+        f = self.get_f(volume)
 
-        return np.exp(RAr + Z -1 -np.log(Z))
+        return -self.N_moles*g - D*f/T
+
+    def get_Fn(self, volume : float) -> float:
+        return -self.get_g(volume)
+    
+    def get_gB(self, volume : float) -> float:
+        return -1/(volume-self.get_B())
+
+    def get_fV(self, volume : float) -> float:
+        V = volume
+        d1 = self.delta_1
+        d2 = self.delta_2
+        B = self.get_B()
+
+        return -1/(self.R*(V+d1*B)*(V+d2*B))
+
+    def get_fB(self, volume : float) -> float:
+        f = self.get_f(volume)
+        V = volume
+        fV = self.get_fV(volume)
+        B = self.get_B()
+
+        return -(f+V*fV)/B
+
+    def get_FB(self, temperature : float, volume : float) -> float:
+        n = self.N_moles
+        gB = self.get_gB(volume)
+        D = self.get_D(temperature)
+        fB = self.get_fB(volume)
+
+        return -n*gB-D*fB/temperature
+
+    def get_FD(self, temperature : float, volume : float) -> float:
+        f = self.get_f(volume)
+
+        return -f/temperature
+
+    def get_specie_D(self, specie_idx : int, temperature : float) -> float:
+        a_pure = [self.a_c[i]*(1+self.m[i]*(1-np.sqrt(temperature/self.Tc[i])))**2 for i in range(self.N)]
+
+        Di = 0
+        for i in range(self.N):
+            Di += 2*self.N_moles*self.X[i]*np.sqrt(a_pure[specie_idx]*a_pure[i])
+
+        return Di
+    
+    def get_specie_B(self, specie_idx : int) -> float:
+        B = self.get_B()
         
-    # Wrong
-    def saturated_pressure(self, temperature : float, N_divs : int = 100) -> float:
-        # Find P at which is phi_l = phi_v for given T
+        sum = 0
+        for i in range(self.N):
+            sum += 2*self.N_moles*self.X[i]*0.5*(self.b[i]+self.b[specie_idx])
 
-        Tc = np.max(self.Tc)
+        return(sum-B)/self.N_moles
+        
+    def helmholz_dFdn(self, specie_idx : int, temperature : float, volume : float) -> float:
+        Fn = self.get_Fn(volume)
+        FB = self.get_FB(temperature,volume)
+        Bi = self.get_specie_B(specie_idx)
+        FD = self.get_FD(temperature,volume)
+        Di = self.get_specie_D(specie_idx,temperature)
 
-        if temperature - Tc > 0:
-            return None
-        elif Tc-temperature < 0.1*Tc:
-            N_divs = 50000
+        return Fn+FB*Bi+FD*Di
+        
+   
+    def specie_fugacity_coefficient(self, specie_idx : int, density : float, temperature : float) -> float:
+        Z = self.compressibility_factor(density,temperature)
+        V = self.N_moles*self.Mm/density
+        helmholz_dni = self.helmholz_dFdn(specie_idx,temperature,V)
 
-        def delta(x,args):
-            P = x
-            self = args[0]
-            T = args[1]
-            density = self.density(P,T)
-            phi_l = self.fugacity_coefficient(density[1],T)
-            phi_v = self.fugacity_coefficient(density[0],T)
-            return phi_l-phi_v
+        R = self.R
+        T = temperature
+
+        return np.exp((helmholz_dni)/(R*T) - np.log(Z))
+        
+    # # Wrong
+    # def saturated_pressure(self, temperature : float, N_divs : int = 100) -> float:
+    #     # Find P at which is phi_l = phi_v for given T
+
+    #     Tc = np.max(self.Tc)
+
+    #     if temperature - Tc > 0:
+    #         return None
+    #     elif Tc-temperature < 0.1*Tc:
+    #         N_divs = 50000
+
+    #     def delta(x,args):
+    #         P = x
+    #         self = args[0]
+    #         T = args[1]
+    #         density = self.density(P,T)
+    #         phi_l = self.fugacity_coefficient(density[1],T)
+    #         phi_v = self.fugacity_coefficient(density[0],T)
+    #         return phi_l-phi_v
 
 
-        Pc = np.max(self.Pc)
-        P = np.linspace(Pc,1,N_divs)
+    #     Pc = np.max(self.Pc)
+    #     P = np.linspace(Pc,1,N_divs)
 
-        d_phi = 0
+    #     d_phi = 0
 
-        for i in range(0,len(P)):
-            density = self.density(P[i],temperature)
+    #     for i in range(0,len(P)):
+    #         density = self.density(P[i],temperature)
 
-            if len(density) > 1:
-                vapor_density = density[0]
-                liquid_density = density[1]
+    #         if len(density) > 1:
+    #             vapor_density = density[0]
+    #             liquid_density = density[1]
 
-                phi_l = self.fugacity_coefficient(liquid_density,temperature)
-                phi_v = self.fugacity_coefficient(vapor_density,temperature)
+    #             phi_l = self.fugacity_coefficient(liquid_density,temperature)
+    #             phi_v = self.fugacity_coefficient(vapor_density,temperature)
 
-                d_phi = phi_l-phi_v
+    #             d_phi = phi_l-phi_v
 
-                # print(P[i],d_phi)
+    #             # print(P[i],d_phi)
 
-                if d_phi*last_d_phi < 0:
-                    args = [self,temperature]
-                    return brentq(delta,P[i-1],P[i],args)
-
-                    
-
-            last_d_phi = d_phi
+    #             if d_phi*last_d_phi < 0:
+    #                 args = [self,temperature]
+    #                 return brentq(delta,P[i-1],P[i],args)
+                
+    #         last_d_phi = d_phi
 
