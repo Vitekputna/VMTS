@@ -35,20 +35,6 @@ class cubic_EOS(properties_model):
         else:
             return 0.3796+1.485*acentric_factor-0.1644*acentric_factor**2+0.01667*acentric_factor**3
 
-    def init_pure(self,molar_mass,critical_temperature,critical_pressure,acentric_factor) -> None:
-
-        self.Mm = molar_mass
-        self.Tc = critical_temperature
-        self.Pc = critical_pressure
-        self.acentric_factor = acentric_factor
-
-        self.a_c = (self.Omega_a*(self.R*critical_temperature)**2)/critical_pressure
-        self.b = self.Omega_b*self.R*critical_temperature/critical_pressure
-        
-        self.m = self.get_m(acentric_factor)
-
-        self.X = [1]
-
     def init_mixture(self,molar_mass,critical_temperature,critical_pressure,acentric_factor,number_moles) -> None:
         
         size = len(number_moles)
@@ -75,21 +61,12 @@ class cubic_EOS(properties_model):
         self.delta_2 = 0.5*(c+1-np.sqrt((c+1)**2+4*c))
 
         self.N_moles = sum(number_moles)
-
-        self.is_mixture = False
         self.N = len(number_moles)
-        
-        if self.N > 1:
-            self.is_mixture = True
-            self.init_mixture(molar_mass,critical_temperature,critical_pressure,acentric_factor,number_moles)
-        else:
-            self.init_pure(molar_mass,critical_temperature,critical_pressure,acentric_factor)
+
+        self.init_mixture(molar_mass,critical_temperature,critical_pressure,acentric_factor,number_moles)
 
 # Pure and mixture a,b coefficients
-    def get_a_pure(self, temperature : float) -> float:
-        return self.a_c*(1+self.m*(1-np.sqrt(temperature/self.Tc)))**2
-    
-    def get_a_mixture(self, temperature : float) -> float:
+    def get_a(self, temperature : float) -> float:
         a_pure = [self.a_c[i]*(1+self.m[i]*(1-np.sqrt(temperature/self.Tc[i])))**2 for i in range(self.N)]
 
         a_mix = 0
@@ -99,18 +76,8 @@ class cubic_EOS(properties_model):
                 a_mix += self.X[i]*self.X[j]*np.sqrt(a_pure[i]*a_pure[j])
 
         return a_mix
-
-    def get_a(self, temperature : float):
-        
-        if self.is_mixture:
-            return self.get_a_mixture(temperature)
-        else:
-            return self.get_a_pure(temperature)
-
-    def get_b_pure(self) -> float:
-        return self.b
     
-    def get_b_mixture(self) -> float:
+    def get_b(self) -> float:
         
         b_mix = 0
 
@@ -119,13 +86,6 @@ class cubic_EOS(properties_model):
                 b_mix += self.X[i]*self.X[j]*0.5*(self.b[i]+self.b[j])
 
         return b_mix
-
-    def get_b(self) -> float:
-        
-        if self.is_mixture:
-            return self.get_b_mixture()
-        else:
-            return self.get_b_pure()
 
 # Basic properties
     def pressure(self, density: float, temperature: float) -> float:
@@ -209,7 +169,7 @@ class cubic_EOS(properties_model):
         return np.log((1+d1*B/V)/(1+d2*B/V))/(R*B*(d1-d2))
 
     def reduced_residual_helmholz(self, density : float, temperature : float) -> float:
-        volume = self.N_moles*self.Mm/density
+        volume = self.N_moles*self.Mm*1e-3/density
         T = temperature
 
         g = self.get_g(volume)
@@ -280,60 +240,51 @@ class cubic_EOS(properties_model):
 
         return Fn+FB*Bi+FD*Di
         
-   
     def specie_fugacity_coefficient(self, specie_idx : int, density : float, temperature : float) -> float:
         Z = self.compressibility_factor(density,temperature)
-        V = self.N_moles*self.Mm/density
+        V = self.N_moles*self.Mm*1e-3/density
         helmholz_dni = self.helmholz_dFdn(specie_idx,temperature,V)
 
-        R = self.R
-        T = temperature
-
-        return np.exp((helmholz_dni)/(R*T) - np.log(Z))
+        return np.exp(helmholz_dni - np.log(Z))
         
     # # Wrong
-    # def saturated_pressure(self, temperature : float, N_divs : int = 100) -> float:
-    #     # Find P at which is phi_l = phi_v for given T
+    def saturated_pressure(self, temperature : float, P_step : float = 1e5) -> float:
+        # Find P at which is phi_l = phi_v for given T
 
-    #     Tc = np.max(self.Tc)
+        if self.N > 1:
+            print("This function is only for single specie saturated pressure")
+            return None
 
-    #     if temperature - Tc > 0:
-    #         return None
-    #     elif Tc-temperature < 0.1*Tc:
-    #         N_divs = 50000
+        Tc = np.max(self.Tc)
 
-    #     def delta(x,args):
-    #         P = x
-    #         self = args[0]
-    #         T = args[1]
-    #         density = self.density(P,T)
-    #         phi_l = self.fugacity_coefficient(density[1],T)
-    #         phi_v = self.fugacity_coefficient(density[0],T)
-    #         return phi_l-phi_v
+        if temperature - Tc > 0:
+            return None
+        elif Tc-temperature < 0.1*Tc:
+            P_step = 1e3
 
+        P_new = np.max(self.Pc)
+        P_old = P_new
+        d_phi = 0
 
-    #     Pc = np.max(self.Pc)
-    #     P = np.linspace(Pc,1,N_divs)
+        run = True
+        while run:
+            density = self.density(P_new,temperature)
 
-    #     d_phi = 0
+            if len(density) > 1:
+                vapor_density = density[0]
+                liquid_density = density[1]
 
-    #     for i in range(0,len(P)):
-    #         density = self.density(P[i],temperature)
+                phi_l = self.specie_fugacity_coefficient(0,liquid_density,temperature)
+                phi_v = self.specie_fugacity_coefficient(0,vapor_density,temperature)
 
-    #         if len(density) > 1:
-    #             vapor_density = density[0]
-    #             liquid_density = density[1]
+                d_phi = phi_l-phi_v
 
-    #             phi_l = self.fugacity_coefficient(liquid_density,temperature)
-    #             phi_v = self.fugacity_coefficient(vapor_density,temperature)
+                # print(P_new,d_phi)
 
-    #             d_phi = phi_l-phi_v
-
-    #             # print(P[i],d_phi)
-
-    #             if d_phi*last_d_phi < 0:
-    #                 args = [self,temperature]
-    #                 return brentq(delta,P[i-1],P[i],args)
+                if d_phi*last_d_phi < 0:
+                    return P_old - last_d_phi*(P_new-P_old)/(d_phi-last_d_phi)
                 
-    #         last_d_phi = d_phi
+            P_old = P_new
+            P_new = P_new-P_step
+            last_d_phi = d_phi
 
