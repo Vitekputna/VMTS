@@ -1,4 +1,4 @@
-from scipy.optimize import brentq
+from scipy.optimize import fsolve
 import numpy as np
 
 class properties_model:
@@ -148,7 +148,6 @@ class cubic_EOS(properties_model):
             return [self.Mm/x1/1000]
 
 # Helmholz function, derivatives and helper functions
-
     def __get_D(self, temperature : float) -> float:
         return self.get_a(temperature)*self.N_moles**2
     
@@ -247,7 +246,6 @@ class cubic_EOS(properties_model):
 
         return np.exp(helmholz_dni - np.log(Z))
         
-    # # Wrong
     def saturated_pressure(self, temperature : float, P_step : float = 1e5) -> float:
         # Find P at which is phi_l = phi_v for given T
 
@@ -293,5 +291,39 @@ class cubic_EOS(properties_model):
             last_d_phi = d_phi
             counter += 1
 
-            
+    def PT_flash(self, pressure : float, temperature : float) -> float:
+
+        def residual(X,args) -> float:
+            z = args[0]
+            K = args[1]
+
+            res = 0
+            for i in range(len(K)):
+                res += z[i]*(K[i]-1)/(1-X+X*K[i])
+    
+            return res
+
+        # Compute vapor and liquid densities
+        density = self.density(pressure,temperature)
+        if len(density) > 1:
+            rho_v = density[0]
+            rho_l = density[1]
+        else: 
+            return None
+
+        # Compute equilibrium factors
+        K = []
+        for i in range(self.N):
+            phi_v = self.specie_fugacity_coefficient(i,rho_v,temperature)
+            phi_l = self.specie_fugacity_coefficient(i,rho_l,temperature)
+            K.append(phi_l/phi_v)
+
+        # Check validity
+        if residual(0,[self.X,K]) > 0 and residual(1,[self.X,K]) > 0: # Superheated vapor
+            return 1
+        elif residual(0,[self.X,K]) < 0 and residual(1,[self.X,K]) < 0: # Subcooled liquid
+            return 0
+        else:
+            args = [self.X,K]
+            return fsolve(residual,0.5,args)[0]
 
