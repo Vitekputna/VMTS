@@ -9,23 +9,55 @@ acf = [0.1521,0.201]
 
 gas = cubic_EOS(Mm,Tc,Pc,acf,[0.75,0.25]) # Winter mix
 
-P = 3e6
+P = 2.07e6
 T = 372
 # print(gas.PT_flash(P,T),gas.density(P,T))
 # print(gas.density(P,T))
 
-T_vec = np.linspace(200,350,num=500)
-P_vec = [1e5,2e5,3e5,4e5,5e5,6e5,7e5,8e5,9e5,1e6,1.1e6,1.2e6,1.3e6,1.4e6,1.5e6]
+T_vec = np.linspace(320,390,num=500)
+P_vec = np.linspace(2e6,4e6)
 
-for P in P_vec:
+# for P in P_vec:
+#     Vals = []
+#     X_vec = []
+#     for T in T_vec:
+#         Value = gas.PT_flash(P,T)
+#         if Value != None:
+#             Vals.append(Value)
+#             X_vec.append(T)
+    
+#     plt.plot(X_vec,Vals)
+
+# plt.show()
+
+
+mix = np.linspace(0,1)
+last_beta = 0
+for x in mix:
     Vals = []
     X_vec = []
+    gas = cubic_EOS(Mm,Tc,Pc,acf,[x,1-x]) # Winter mix
+
     for T in T_vec:
         Value = gas.PT_flash(P,T)
         if Value != None:
-            Vals.append(Value)
-            X_vec.append(T)
-    
-    plt.plot(X_vec,Vals)
 
+            if last_beta == 0 and Value > 0:
+
+                Vals.append(T)
+                X_vec.append(x)
+            
+            elif last_beta < 1 and Value == 1:
+
+                Vals.append(T)
+                X_vec.append(x)
+
+            last_beta = Value
+            
+    
+    # plt.plot(x,)
+    plt.plot(X_vec,Vals,'k.')
+
+plt.xlabel("Propane x[-]")
+plt.ylabel("T[K]")
 plt.show()
