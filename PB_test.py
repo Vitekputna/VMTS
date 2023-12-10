@@ -7,7 +7,7 @@ Tc = [369.89,425.125]
 Pc = [4.2512e6,3.796e6]
 acf = [0.1521,0.201]
 
-gas = cubic_EOS(Mm,Tc,Pc,acf,[0.75,0.25]) # Winter mix
+gas = cubic_EOS(Mm,Tc,Pc,acf,[0.75,0.25])   # Winter mix
 
 P = 2.07e6
 T = 372
@@ -58,6 +58,8 @@ for x in mix:
     # plt.plot(x,)
     plt.plot(X_vec,Vals,'k.')
 
+plt.title("X-T diagram, Propane-Butane")
+plt.grid()
 plt.xlabel("Propane x[-]")
 plt.ylabel("T[K]")
 plt.show()

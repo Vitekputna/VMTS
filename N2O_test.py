@@ -16,3 +16,5 @@ for T in T_vec:
     plt.plot(T,pg.saturated_pressure(T),'rx')
 
 plt.show()
+
+pg.__get_B()

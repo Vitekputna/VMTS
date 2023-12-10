@@ -41,6 +41,7 @@ class cubic_EOS(properties_model):
 
         self.Mm = np.sum(np.multiply(number_moles,molar_mass))/self.N_moles
         
+        self.Mm_component = molar_mass
         self.X = np.multiply(number_moles,1/self.N_moles)
         self.Tc = critical_temperature
         self.Pc = critical_pressure
@@ -64,6 +65,11 @@ class cubic_EOS(properties_model):
         self.N = len(number_moles)
 
         self.init_mixture(molar_mass,critical_temperature,critical_pressure,acentric_factor,number_moles)
+
+    def set_composition(self, number_moles):
+        self.N_moles = sum(number_moles)
+        self.init_mixture(self.Mm_component,self.Tc,self.Pc,self.acentric_factor,number_moles)
+
 
 # Pure and mixture a,b coefficients
     def get_a(self, temperature : float) -> float:
